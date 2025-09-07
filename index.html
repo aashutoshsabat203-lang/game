@@ -3,488 +3,83 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Virar Rescue</title>
+    <title>Virar Storm Rescue</title>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap');
-        body {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            margin: 0;
-            background-color: #334155;
-            color: #e2e8f0;
-            font-family: 'Inter', sans-serif;
-            flex-direction: column;
-        }
-
-        .game-container {
-            position: relative;
-            border-radius: 12px;
-            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
-            overflow: hidden;
-            width: 800px;
-            height: 600px;
-        }
-
-        canvas {
-            display: block;
-            width: 100%;
-            height: 100%;
-        }
-
-        .ui-panel {
-            position: absolute;
-            top: 10px;
-            left: 10px;
-            background-color: rgba(0, 0, 0, 0.5);
-            padding: 10px;
-            border-radius: 8px;
-            color: white;
-            z-index: 10;
-            font-size: 14px;
-            display: flex;
-            flex-direction: column;
-            gap: 5px;
-            user-select: none;
-        }
-
-        .controls-panel {
-            position: absolute;
-            bottom: 10px;
-            right: 10px;
-            background-color: rgba(0, 0, 0, 0.5);
-            padding: 10px;
-            border-radius: 8px;
-            color: white;
-            z-index: 10;
-            font-size: 14px;
-            user-select: none;
-        }
-
-        .controls-panel h3, .ui-panel h3 {
-            margin: 0 0 5px 0;
-        }
-
-        .health-bar-container {
-            width: 100px;
-            height: 10px;
-            background-color: #ef4444;
-            border-radius: 5px;
-            overflow: hidden;
-        }
-
-        .health-bar {
-            height: 100%;
-            background-color: #22c55e;
-            transition: width 0.3s;
-        }
-
-        .message-box {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            background-color: rgba(255, 255, 255, 0.9);
-            padding: 20px 40px;
-            border-radius: 12px;
-            box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
-            text-align: center;
-            z-index: 100;
-            font-size: 18px;
-            font-weight: bold;
-            color: #1a202c;
-            user-select: none;
-            display: none;
-        }
-
-        .message-box button {
-            margin-top: 15px;
-            padding: 10px 20px;
-            background-color: #3b82f6;
-            color: white;
-            border: none;
-            border-radius: 8px;
-            cursor: pointer;
-            transition: background-color 0.3s;
-        }
-
-        .message-box button:hover {
-            background-color: #2563eb;
-        }
+        body { margin:0; overflow:hidden; background:#334155; }
+        canvas { display:block; margin:0 auto; }
     </style>
 </head>
 <body>
-    <div class="game-container">
-        <div id="game-canvas"></div>
-        <div class="ui-panel">
-            <h3>Mission Status</h3>
-            <div id="mission-text">Civilians Rescued: 0 / 3</div>
-            <h3>Health</h3>
-            <div class="health-bar-container">
-                <div id="health-bar" class="health-bar" style="width: 100%;"></div>
-            </div>
-        </div>
-        <div class="controls-panel">
-            <h3>Controls</h3>
-            <p>Walking: WASD</p>
-            <p>Driving: Arrow Keys</p>
-            <p>Enter/Exit Car: Space</p>
-        </div>
-        <div id="message-box" class="message-box">
-            <span id="message-text"></span>
-            <button onclick="window.location.reload();">Restart</button>
-        </div>
-    </div>
-
-    <!-- Phaser.js CDN -->
-    <script src="https://cdn.jsdelivr.net/npm/phaser@3.55.2/dist/phaser.min.js"></script>
-
+    <script src="phaser.min.js"></script>
     <script>
-        // Game configuration
         const config = {
             type: Phaser.AUTO,
             width: 800,
             height: 600,
-            parent: 'game-canvas',
-            physics: {
-                default: 'arcade',
-                arcade: {
-                    debug: false
-                }
-            },
-            scene: {
-                preload: preload,
-                create: create,
-                update: update
-            }
+            physics: { default: 'arcade', arcade: { debug: false } },
+            scene: { preload, create, update }
         };
+        const game = new Phaser.Game(config);
 
-        let game = new Phaser.Game(config);
-
-        // Game variables
-        let player, vehicle, cursors, wasd, spaceKey, isDriving = false;
-        let npcs, enemies, civilians;
+        let player, vehicle, cursors;
+        let civilians, enemies;
         let health = 100;
         let civiliansRescued = 0;
-        let healthText, missionText;
-        let rainParticles, lightningTimer;
-        let messageBox, messageText;
-        let map;
+        let missionText, healthText;
 
         function preload() {
-            // Load a simple square image (created from a data URI) for all sprites
-            const pixel = new Uint8ClampedArray([255, 255, 255, 255]);
-            this.textures.create('pixel', 1, 1, pixel);
+            this.load.image('player','assets/player.png');
+            this.load.image('vehicle','assets/vehicle.png');
+            this.load.image('civilian','assets/civilian.png');
+            this.load.image('enemy','assets/enemy.png');
         }
 
         function create() {
-            messageBox = document.getElementById('message-box');
-            messageText = document.getElementById('message-text');
-
-            // Set up the map using simple rectangles
-            map = this.add.container(0, 0);
-
-            const tileSize = 40;
-            const mapData = [
-                '--------------------',
-                '--------------------',
-                '---M-M-M-S-S-S-S----',
-                '---M-M-M-S-S-S-S----',
-                '--S-S-S-S-S-S-S-S---',
-                '--S-S-S-S-S-S-S-S---',
-                '--S-S-S-S-S-W-W-W---',
-                '--S-S-S-S-S-W-W-W---',
-                '--S-S-S-S-S-W-W-W---',
-                '---S-S-S-S-S-B-B----',
-                '---S-S-S-S-S-B-B----',
-                '----S-S-S-S-B-B-S-S-',
-                '----S-S-S-S-B-B-S-S-',
-                '---S-S-S-S-B-B-S-S-S',
-                '---S-S-S-S-B-B-S-S-S'
-            ];
-
-            const mapWidth = mapData[0].length * tileSize;
-            const mapHeight = mapData.length * tileSize;
-            this.physics.world.setBounds(0, 0, mapWidth, mapHeight);
-
-            // Create tile rectangles and labels
-            for (let y = 0; y < mapData.length; y++) {
-                for (let x = 0; x < mapData[y].length; x++) {
-                    const tileType = mapData[y][x];
-                    let color = 0x6b7280; // Default: Gray streets
-                    let label = '';
-                    switch (tileType) {
-                        case 'S': // Street
-                            color = 0x6b7280;
-                            break;
-                        case 'M': // Market
-                            color = 0x6ee7b7;
-                            label = 'Market';
-                            break;
-                        case 'W': // Chakreshwar Talav (Water)
-                            color = 0x3b82f6;
-                            label = 'Talav';
-                            break;
-                        case 'B': // Virar Beach
-                            color = 0xfde047;
-                            label = 'Beach';
-                            break;
-                        default: // Building / Other
-                            color = 0x1e293b;
-                            break;
-                    }
-                    const tile = this.add.rectangle(x * tileSize, y * tileSize, tileSize, tileSize, color).setOrigin(0, 0);
-                    map.add(tile);
-                    if (label) {
-                        const text = this.add.text(x * tileSize + tileSize / 2, y * tileSize + tileSize / 2, label, {
-                            fontSize: '10px',
-                            fill: '#fff',
-                            fontStyle: 'bold'
-                        }).setOrigin(0.5);
-                        map.add(text);
-                    }
-                }
-            }
-            
-            // Create player
-            player = this.physics.add.sprite(200, 200, 'pixel');
-            player.setDisplaySize(20, 20);
-            player.setTint(0xef4444);
+            player = this.physics.add.sprite(400,300,'player');
             player.setCollideWorldBounds(true);
-            player.body.onWorldBounds = true;
-            this.physics.world.on('worldbounds', (body) => {
-                if (body.gameObject === player) {
-                    health = Math.max(0, health - 10);
-                    updateHealthBar();
-                }
-            });
 
-            // Create vehicle
-            vehicle = this.physics.add.sprite(500, 500, 'pixel');
-            vehicle.setDisplaySize(40, 60);
-            vehicle.setTint(0x22c55e);
+            cursors = this.input.keyboard.createCursorKeys();
+
+            vehicle = this.physics.add.sprite(500,500,'vehicle');
             vehicle.setCollideWorldBounds(true);
 
-            // Create NPCs and Enemy Gang
-            npcs = this.physics.add.group({
-                key: 'pixel',
-                repeat: 10,
-                setXY: { x: 100, y: 100, stepX: 50, stepY: 50 }
-            });
-            npcs.children.iterate(npc => {
-                npc.setTint(0x94a3b8);
-                npc.setDisplaySize(15, 15);
-                npc.setCollideWorldBounds(true);
-                npc.setVelocity(Phaser.Math.Between(-100, 100), Phaser.Math.Between(-100, 100));
-                this.time.addEvent({
-                    delay: 2000,
-                    loop: true,
-                    callback: () => npc.setVelocity(Phaser.Math.Between(-100, 100), Phaser.Math.Between(-100, 100))
-                });
-            });
-
-            enemies = this.physics.add.group({
-                key: 'pixel',
-                repeat: 3,
-                setXY: { x: 400, y: 400, stepX: 30 }
-            });
-            enemies.children.iterate(enemy => {
-                enemy.setTint(0xdc2626);
-                enemy.setDisplaySize(20, 20);
-                enemy.setCollideWorldBounds(true);
-                this.time.addEvent({
-                    delay: 1500,
-                    loop: true,
-                    callback: () => {
-                        this.physics.moveToObject(enemy, player, 50);
-                    }
-                });
-            });
-
-            // Create Civilians
             civilians = this.physics.add.group();
-            const civilianSpots = [
-                { x: 500, y: 300 },
-                { x: 550, y: 350 },
-                { x: 600, y: 320 }
-            ];
-            civilianSpots.forEach(spot => {
-                const civilian = civilians.create(spot.x, spot.y, 'pixel');
-                civilian.setTint(0xf97316);
-                civilian.setDisplaySize(15, 15);
-                civilian.setImmovable(true);
-            });
+            civilians.create(200, 200, 'civilian');
+            civilians.create(600, 400, 'civilian');
 
-            // Physics and Collisions
-            this.physics.add.collider(player, npcs);
-            this.physics.add.collider(player, enemies, handleEnemyCollision, null, this);
-            this.physics.add.overlap(player, vehicle, handleVehicleOverlap, null, this);
-            this.physics.add.collider(player, civilians, handleCivilianRescue, null, this);
+            enemies = this.physics.add.group();
+            enemies.create(300, 300, 'enemy');
+            enemies.create(500, 200, 'enemy');
 
-            this.physics.add.collider(npcs, npcs);
-            this.physics.add.collider(npcs, enemies);
-            this.physics.add.collider(enemies, enemies);
+            missionText = this.add.text(10,10,'Civilians Rescued: 0/2',{ font:'16px Arial', fill:'#fff' });
+            healthText = this.add.text(10,30,'Health: 100%',{ font:'16px Arial', fill:'#fff' });
 
-            // Camera setup
-            this.cameras.main.setBounds(0, 0, mapWidth, mapHeight);
-            this.cameras.main.startFollow(player, true, 0.05, 0.05);
-
-            // Keyboard input
-            cursors = this.input.keyboard.createCursorKeys();
-            wasd = {
-                up: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.W),
-                down: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.S),
-                left: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.A),
-                right: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.D)
-            };
-            spaceKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
-
-            // Storm effects (rain & lightning)
-            rainParticles = this.add.particles('pixel').createEmitter({
-                x: { min: 0, max: mapWidth },
-                y: -10,
-                lifespan: 400,
-                speedY: { min: 200, max: 400 },
-                scale: { start: 0.1, end: 0.2 },
-                tint: 0x88c0d0,
-                quantity: 10,
-                gravityY: 300,
-                alpha: { start: 0.8, end: 0 },
-                rotate: 15,
-                blendMode: 'ADD'
-            });
-
-            lightningTimer = this.time.addEvent({
-                delay: 5000,
-                loop: true,
-                callback: () => {
-                    const flash = this.add.graphics({ fillStyle: { color: 0xffffff } }).setAlpha(0);
-                    flash.fillRect(0, 0, mapWidth, mapHeight);
-                    this.tweens.add({
-                        targets: flash,
-                        alpha: { from: 1, to: 0 },
-                        duration: 100,
-                        onComplete: () => flash.destroy()
-                    });
-                }
-            });
-
-            // Initial UI update
-            updateMissionText();
+            this.physics.add.overlap(player, civilians, rescueCivilian, null, this);
+            this.physics.add.overlap(player, enemies, hitEnemy, null, this);
         }
 
         function update() {
-            // Player movement
-            if (isDriving) {
-                player.setVelocity(0);
-                vehicle.x = player.x;
-                vehicle.y = player.y;
+            player.setVelocity(0);
+            const speed = 200;
 
-                const vehicleSpeed = 200;
-                if (cursors.left.isDown) { vehicle.setVelocityX(-vehicleSpeed); }
-                else if (cursors.right.isDown) { vehicle.setVelocityX(vehicleSpeed); }
-                else { vehicle.setVelocityX(0); }
-                if (cursors.up.isDown) { vehicle.setVelocityY(-vehicleSpeed); }
-                else if (cursors.down.isDown) { vehicle.setVelocityY(vehicleSpeed); }
-                else { vehicle.setVelocityY(0); }
-            } else {
-                const playerSpeed = 100;
-                if (wasd.left.isDown) { player.setVelocityX(-playerSpeed); }
-                else if (wasd.right.isDown) { player.setVelocityX(playerSpeed); }
-                else { player.setVelocityX(0); }
-                if (wasd.up.isDown) { player.setVelocityY(-playerSpeed); }
-                else if (wasd.down.isDown) { player.setVelocityY(playerSpeed); }
-                else { player.setVelocityY(0); }
-            }
-
-            // Enter/Exit vehicle
-            if (Phaser.Input.Keyboard.JustDown(spaceKey)) {
-                if (isDriving) {
-                    isDriving = false;
-                    vehicle.setVelocity(0);
-                }
-            }
-
-            // NPC random movements (already handled by time event, just keep them within bounds)
-            npcs.children.iterate(npc => {
-                if (npc.body.velocity.x === 0 && npc.body.velocity.y === 0) {
-                    npc.setVelocity(Phaser.Math.Between(-100, 100), Phaser.Math.Between(-100, 100));
-                }
-            });
-            
-            // Enemy AI (already handled in create with time event, just checking health)
-            enemies.children.iterate(enemy => {
-                if (health <= 0) {
-                    enemy.setVelocity(0, 0);
-                }
-            });
+            if(cursors.left.isDown) player.setVelocityX(-speed);
+            if(cursors.right.isDown) player.setVelocityX(speed);
+            if(cursors.up.isDown) player.setVelocityY(-speed);
+            if(cursors.down.isDown) player.setVelocityY(speed);
         }
 
-        // --- Game Logic Functions ---
-
-        function handleVehicleOverlap(player, vehicle) {
-            if (Phaser.Input.Keyboard.JustDown(spaceKey) && !isDriving) {
-                isDriving = true;
-                player.setVelocity(0);
-            }
-        }
-
-        function handleCivilianRescue(player, civilian) {
-            if (isDriving) return;
-            civiliansRescued++;
-            updateMissionText();
+        function rescueCivilian(player, civilian) {
             civilian.destroy();
-
-            // Check for victory condition
-            if (civiliansRescued >= 3) {
-                showGameMessage('Mission Complete! You rescued all civilians!', true);
-            }
+            civiliansRescued++;
+            missionText.setText(`Civilians Rescued: ${civiliansRescued}/2`);
+            if(civiliansRescued>=2) alert('Mission Complete!');
         }
 
-        function handleEnemyCollision(player, enemy) {
-            if (isDriving) {
-                // Ramming enemies is a bad idea
-                health = Math.max(0, health - 50);
-            } else {
-                health = Math.max(0, health - 20);
-            }
-            updateHealthBar();
-
-            // Check for game over condition
-            if (health <= 0) {
-                showGameMessage('Game Over. You were overwhelmed by the gang!', false);
-                this.physics.pause();
-                lightningTimer.remove();
-            }
-        }
-
-        // --- UI Functions ---
-
-        function updateHealthBar() {
-            const healthBar = document.getElementById('health-bar');
-            healthBar.style.width = `${health}%`;
-            if (health <= 30) {
-                healthBar.style.backgroundColor = '#ef4444';
-            } else {
-                healthBar.style.backgroundColor = '#22c55e';
-            }
-        }
-
-        function updateMissionText() {
-            const missionStatus = document.getElementById('mission-text');
-            missionStatus.textContent = `Civilians Rescued: ${civiliansRescued} / 3`;
-        }
-
-        function showGameMessage(message, isWin) {
-            messageText.textContent = message;
-            messageBox.style.display = 'block';
-            if (isWin) {
-                messageBox.style.backgroundColor = 'rgba(34, 197, 94, 0.9)'; // Green for win
-                messageBox.style.color = '#fff';
-            } else {
-                messageBox.style.backgroundColor = 'rgba(239, 68, 68, 0.9)'; // Red for loss
-                messageBox.style.color = '#fff';
-            }
+        function hitEnemy(player, enemy) {
+            health -= 20;
+            healthText.setText(`Health: ${health}%`);
+            if(health<=0) alert('Game Over!');
         }
     </script>
+</body>
+</html>
